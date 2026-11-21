@@ -1,46 +1,51 @@
 #!/usr/bin/env python3
 """Ship the finished Azmara passport spread to the output directory.
 
-The finished picture lives in this repository as base64 text
-(entry.png.b64). This entrypoint uses only the standard library:
-it finds the payload, decodes it, checks the PNG magic bytes,
-and writes the result to /output/entry.png (or to the directory
-MAKEFUN_OUTPUT_DIR names). The grader has no Pillow and no fonts,
-so nothing here imports anything beyond the stdlib.
+The finished picture lives in this repository as entry.png (rendered
+locally at build time with Pillow). This entrypoint uses only the
+standard library: it finds the PNG, checks the PNG magic bytes and
+the expected sha256, and copies it to /output/entry.png (or to the
+directory MAKEFUN_OUTPUT_DIR names). The grader has no Pillow and
+no fonts, so nothing here imports anything beyond the stdlib.
 """
 
-import base64
 import hashlib
 import os
 import sys
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+EXPECTED_SHA256 = "c52ef013d17bce603deb00e8d898a09d4fafd222145dda891600a3bf6dd22874"
+EXPECTED_BYTES = 387187
 
 
 def locate_payload():
-    """Find entry.png.b64 next to this file, else in the bot dir."""
+    """Find entry.png next to this file, else in the bot dir."""
     here = os.path.dirname(os.path.abspath(__file__))
-    candidate = os.path.join(here, "entry.png.b64")
+    candidate = os.path.join(here, "entry.png")
     if os.path.isfile(candidate):
         return candidate
     bot_dir = os.environ.get("MAKEFUN_BOT_DIR", "")
     if bot_dir:
-        alt = os.path.join(bot_dir, "entry.png.b64")
+        alt = os.path.join(bot_dir, "entry.png")
         if os.path.isfile(alt):
             return alt
     return candidate
 
 
 def load_image_bytes(path):
-    """Decode the base64 payload at path, verifying the PNG header."""
-    with open(path, "r", encoding="ascii") as handle:
-        text = "".join(handle.read().split())
-    try:
-        raw = base64.b64decode(text, validate=True)
-    except Exception as exc:
-        raise ValueError(f"{path} is not valid base64: {exc}") from exc
+    """Read the PNG payload at path, verifying magic bytes and hash."""
+    with open(path, "rb") as handle:
+        raw = handle.read()
     if not raw.startswith(PNG_MAGIC):
-        raise ValueError(f"{path} does not decode to a PNG image")
+        raise ValueError(f"{path} does not start with PNG magic bytes")
+    if len(raw) != EXPECTED_BYTES:
+        raise ValueError(
+            f"{path} is {len(raw)} bytes, expected {EXPECTED_BYTES}")
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != EXPECTED_SHA256:
+        raise ValueError(
+            f"{path} sha256 mismatch: got {digest}, "
+            f"expected {EXPECTED_SHA256}")
     return raw
 
 
